@@ -25,3 +25,17 @@
   the offset is applied before the (naive-UTC) value is stored.
 - **Verified by:** manual curl (booking with `+06:00` offset now returns
   `09:00:00+00:00`).
+
+## Bug 3: Conflict check uses non-strict bounds (back-to-back rejected)
+- **File/Line:** app/routers/bookings.py:50
+- **Difficulty:** Medium
+- **What was wrong:** `_has_conflict` used `b.start_time <= end and start <=
+  b.end_time` (non-strict `<=`) instead of the spec's strict `<` comparison.
+- **Why it broke behavior:** Violated Rule 3. Back-to-back bookings (one ending
+  exactly when the other starts) were wrongly rejected as `ROOM_CONFLICT`,
+  though the spec explicitly allows them.
+- **Fix:** Changed `<=` to `<` on both bounds: `b.start_time < end and start <
+  b.end_time`.
+- **Verified by:** SR, via pytest script (back-to-back booking now succeeds,
+  true overlap still returns 409 ROOM_CONFLICT).
+
