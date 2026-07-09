@@ -95,5 +95,34 @@
 - **Verified by:** SR, via pytest (50% of 1001 → 501; 50% of 1003 → 502;
   RefundLog amount == cancel response amount).
 
+## Bug 8: Reference code generation is not atomic under concurrency
+- **File/Line:** app/services/reference.py:17-21
+- **Difficulty:** Hard
+- **What was wrong:** `next_reference_code` read `_counter["value"]`, slept
+  0.12s, then incremented — a classic read-modify-write race. Multiple
+  concurrent threads read the same counter value during the sleep, producing
+  duplicate reference codes.
+- **Why it broke behavior:** Violated Rule 7 ("Every booking's
+  `reference_code` is unique, including under concurrent creation").
+- **Fix:** Replaced dict-counter + sleep with `itertools.count(1000)` guarded
+  by a `threading.Lock` so each `next()` is atomic.
+- **Verified by:** SR, via concurrency script (10 threads × 100 calls = 1000
+  codes, all unique).
+
+## Bug 9: Rate limiter is not atomic under concurrency
+- **File/Line:** app/services/ratelimit.py:18-26
+- **Difficulty:** Hard
+- **What was wrong:** `record_and_check` read the bucket, trimmed it, slept
+  0.1s, then appended and wrote back — a read-modify-write race. Concurrent
+  threads all saw the same pre-append bucket state, so >20 requests could
+  slip through in the 60s window.
+- **Why it broke behavior:** Violated Rule 5 ("limited to 20 requests per
+  rolling 60 seconds per user... must hold under concurrent requests").
+- **Fix:** Wrapped the read-trim-append-write block in a `threading.Lock` so
+  the check-and-record is atomic; removed the `sleep`.
+- **Verified by:** SR, via concurrency script (40 concurrent requests →
+  exactly 20 ok, 20 limited).
+
+
 
 
