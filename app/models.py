@@ -1,6 +1,7 @@
 """SQLAlchemy ORM models for the CoWork domain."""
 from datetime import datetime
 
+# pyrefly: ignore [missing-import]
 from sqlalchemy import (
     Column,
     DateTime,
