@@ -261,6 +261,33 @@
 - **Verified by:** SR, via pytest (5 bookings, page 1 limit 2 → 2 items; page 2
   → 2 non-overlapping items; page 3 → 1 item; all ascending).
 
+## Bug 20: Export skips org check for room-specific export
+- **File/Line:** app/services/export.py:22-29
+- **Difficulty:** Medium
+- **What was wrong:** `fetch_bookings_raw` queried bookings by `room_id` only
+  with no org filter. When `include_all=True` and a `room_id` was provided, an
+  admin could export bookings from another org's room by guessing its ID.
+- **Why it broke behavior:** Violated Rule 9 ("cross-org resource IDs behave as
+  non-existent → 404").
+- **Fix:** Added `Room.org_id` filter to `fetch_bookings_raw` via a join.
+- **Verified by:** SR, via pytest (admin B exporting org A's room → 0 bookings
+  returned).
+
+## Bug 21: get_booking lets members read other members' bookings
+- **File/Line:** app/routers/bookings.py:152-153
+- **Difficulty:** Easy
+- **What was wrong:** `get_booking` filtered by org only, with no owner check
+  for members. A member could read another member's booking in the same org.
+- **Why it broke behavior:** Violated Rule 10 ("members may read and cancel
+  only their own bookings (another member's booking id → 404
+  BOOKING_NOT_FOUND)").
+- **Fix:** Added `if user.role != "admin" and booking.user_id != user.id:
+  raise AppError(404, "BOOKING_NOT_FOUND", ...)` — same check the cancel route
+  already had.
+- **Verified by:** SR, via pytest (member reading another's booking → 404;
+  admin reading any org booking → 200).
+
+
 
 
 
