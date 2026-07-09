@@ -211,6 +211,57 @@
 - **Verified by:** SR, via concurrency script (2 concurrent cancels → exactly
   1 cancelled, 1 ALREADY_CANCELLED, 1 RefundLog entry).
 
+## Bug 16: Logout blacklist checks wrong JWT claim
+- **File/Line:** app/auth.py:97
+- **Difficulty:** Easy
+- **What was wrong:** `revoke_access_token` stored `payload["jti"]` in
+  `_revoked_tokens`, but `get_token_payload` checked `payload.get("sub") in
+  _revoked_tokens` — the user id, which was never added to the set.
+- **Why it broke behavior:** Violated Rule 8 ("logout immediately invalidates
+  the presented access token (subsequent use → 401)"). A logged-out token
+  continued to work.
+- **Fix:** Changed the check from `payload.get("sub")` to `payload.get("jti")`.
+- **Verified by:** SR, via pytest (token works before logout, 401 after).
+
+## Bug 17: Refresh tokens are not single-use
+- **File/Line:** app/routers/auth.py:81-93
+- **Difficulty:** Medium
+- **What was wrong:** The `refresh` endpoint decoded the refresh token and
+  issued new tokens but never invalidated the presented refresh token. The same
+  refresh token could be reused indefinitely.
+- **Why it broke behavior:** Violated Rule 8 ("refresh tokens are single-use...
+  reuse → 401").
+- **Fix:** Added `_used_refresh_tokens` set in `auth.py`; the refresh route now
+  checks and records `jti` so re-use returns 401.
+- **Verified by:** SR, via pytest (first refresh 200, reuse 401).
+
+## Bug 18: Register returns existing user on duplicate username
+- **File/Line:** app/routers/auth.py:37-43
+- **Difficulty:** Easy
+- **What was wrong:** When a duplicate username was found, the register route
+  returned the existing user's data with 200 instead of raising an error.
+- **Why it broke behavior:** Violated Rule 15 ("a duplicate username within the
+  org → 409 USERNAME_TAKEN").
+- **Fix:** Replaced the `return` with `raise AppError(409, "USERNAME_TAKEN",
+  "Username already taken")`.
+- **Verified by:** SR, via pytest (duplicate username → 409 USERNAME_TAKEN).
+
+## Bug 19: Bookings list — wrong sort, offset, and hardcoded limit
+- **File/Line:** app/routers/bookings.py:127-129
+- **Difficulty:** Medium
+- **What was wrong:** Three bugs: (1) `.desc()` instead of `.asc()` on
+  `start_time`; (2) `page * limit` instead of `(page - 1) * limit` (page 1
+  skipped the first `limit` items); (3) `.limit(10)` hardcoded instead of
+  `.limit(limit)`.
+- **Why it broke behavior:** Violated Rule 11 ("sorted ascending by start_time
+  (ties by ascending id). Sequential pages never skip or repeat items.").
+  Items were reversed, page 1 skipped the first batch, and `limit` param was
+  ignored.
+- **Fix:** Changed to `.asc()`, `(page - 1) * limit`, and `.limit(limit)`.
+- **Verified by:** SR, via pytest (5 bookings, page 1 limit 2 → 2 items; page 2
+  → 2 non-overlapping items; page 3 → 1 item; all ascending).
+
+
 
 
 
