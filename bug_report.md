@@ -5,7 +5,7 @@
 
 ## Bug 1: Access Token Lifetime
 - **File/Line:** app/auth.py:50
-- **Difficulty:** Easy
+
 - **What was wrong:** The access token lifetime was calculated by multiplying the config value by 60, resulting in a 15-hour expiration instead of 15 minutes.
 - **Why it broke behavior:** Violated Rule 8 (Access tokens expire in exactly 900 seconds).
 - **Fix:** Removed the `* 60` multiplier when creating the timedelta.
@@ -13,7 +13,7 @@
 
 ## Bug 2: Datetime offset dropped instead of converted to UTC
 - **File/Line:** app/timeutils.py:13
-- **Difficulty:** Medium
+
 - **What was wrong:** `parse_input_datetime` called `dt.replace(tzinfo=None)` on
   offset-aware inputs, which strips the offset but keeps the wall-clock numbers
   instead of converting them to UTC.
@@ -28,7 +28,7 @@
 
 ## Bug 3: Conflict check uses non-strict bounds (back-to-back rejected)
 - **File/Line:** app/routers/bookings.py:50
-- **Difficulty:** Medium
+
 - **What was wrong:** `_has_conflict` used `b.start_time <= end and start <=
   b.end_time` (non-strict `<=`) instead of the spec's strict `<` comparison.
 - **Why it broke behavior:** Violated Rule 3. Back-to-back bookings (one ending
@@ -41,7 +41,7 @@
 
 ## Bug 4: Booking window validation — grace window, missing min duration, missing end≤start guard
 - **File/Line:** app/routers/bookings.py:86-94
-- **Difficulty:** Medium
+
 - **What was wrong:** Three issues: (1) `start <= now - timedelta(seconds=300)`
   gave a 5-minute past grace window; (2) no `end <= start` guard, so negative
   durations slipped through (`int(-1.0) == -1.0` passes whole-hours check, `-1 >
@@ -56,7 +56,7 @@
 
 ## Bug 5: get_booking overwrites start_time with created_at
 - **File/Line:** app/routers/bookings.py:169
-- **Difficulty:** Easy
+
 - **What was wrong:** `response["start_time"] = iso_utc(booking.created_at)`
   overwrote the booking's `start_time` with its `created_at` timestamp.
 - **Why it broke behavior:** `GET /bookings/{id}` returned the wrong
@@ -67,7 +67,7 @@
 
 ## Bug 6: Refund tier logic — 0% case returns 50%, and 48h boundary wrong
 - **File/Line:** app/routers/bookings.py:200-209
-- **Difficulty:** Medium
+
 - **What was wrong:** (1) Used `notice_hours > 48` (int-truncated) instead of
   `≥ 48h`, so exactly 48h notice gave 50% instead of 100%. (2) The `else`
   branch (notice < 24h) returned `50` instead of `0`.
@@ -80,7 +80,7 @@
 
 ## Bug 7: Refund rounding uses banker's rounding + amount recomputed separately in RefundLog
 - **File/Line:** app/routers/bookings.py:209, app/services/refunds.py:14-17
-- **Difficulty:** Hard
+
 - **What was wrong:** (1) `round()` in Python uses banker's rounding
   (round-half-to-even), but Rule 6 requires half-cents rounding up. (2) The
   cancel response computed `refund_amount_cents` via `round()` while
@@ -97,7 +97,7 @@
 
 ## Bug 8: Reference code generation is not atomic under concurrency
 - **File/Line:** app/services/reference.py:17-21
-- **Difficulty:** Hard
+
 - **What was wrong:** `next_reference_code` read `_counter["value"]`, slept
   0.12s, then incremented — a classic read-modify-write race. Multiple
   concurrent threads read the same counter value during the sleep, producing
@@ -111,7 +111,7 @@
 
 ## Bug 9: Rate limiter is not atomic under concurrency
 - **File/Line:** app/services/ratelimit.py:18-26
-- **Difficulty:** Hard
+
 - **What was wrong:** `record_and_check` read the bucket, trimmed it, slept
   0.1s, then appended and wrote back — a read-modify-write race. Concurrent
   threads all saw the same pre-append bucket state, so >20 requests could
@@ -125,7 +125,7 @@
 
 ## Bug 10: Stats service is not atomic under concurrency
 - **File/Line:** app/services/stats.py:15-26
-- **Difficulty:** Hard
+
 - **What was wrong:** `record_create` and `record_cancel` both used a
   read-sleep-write pattern (`current = _stats.get(...)`; `sleep(0.1)`;
   `_stats[room_id] = {...}`). Concurrent calls lost updates because they read
@@ -140,7 +140,7 @@
 
 ## Bug 11: Cancel does not invalidate availability cache
 - **File/Line:** app/routers/bookings.py:218
-- **Difficulty:** Medium
+
 - **What was wrong:** The cancel route invalidated the report cache
   (`cache.invalidate_report`) but not the availability cache. After a cancel,
   `GET /rooms/{id}/availability` returned a stale busy interval.
@@ -154,7 +154,7 @@
 
 ## Bug 12: Notifications deadlock under concurrent create+cancel
 - **File/Line:** app/services/notifications.py:24-35
-- **Difficulty:** Hard
+
 - **What was wrong:** `notify_created` acquired `_email_lock` then `_audit_lock`
   (nested), while `notify_cancelled` acquired `_audit_lock` then `_email_lock`
   (nested) — a classic lock-ordering inversion.
@@ -167,7 +167,7 @@
 
 ## Bug 13: Conflict check TOCTOU race under concurrent booking creation
 - **File/Line:** app/routers/bookings.py:48, 85-102
-- **Difficulty:** Hard
+
 - **What was wrong:** `_has_conflict` had a `_pricing_warmup()` sleep (0.12s)
   between fetching existing bookings and the conflict decision, and the conflict
   check + booking commit were separate non-atomic operations. Two concurrent
@@ -183,7 +183,7 @@
 
 ## Bug 14: Quota check TOCTOU race under concurrent booking creation
 - **File/Line:** app/routers/bookings.py:68, 88
-- **Difficulty:** Hard
+
 - **What was wrong:** `_check_quota` had a `_quota_audit()` sleep (0.1s) between
   counting confirmed bookings and raising the error, and the quota check + new
   booking commit were separate non-atomic operations. Concurrent requests all
@@ -197,7 +197,7 @@
 
 ## Bug 15: Concurrent cancel creates duplicate RefundLogs
 - **File/Line:** app/routers/bookings.py:37-39, 195-214
-- **Difficulty:** Hard
+
 - **What was wrong:** The cancel route checked `booking.status == "cancelled"`,
   then had a `_settlement_pause()` sleep (0.12s) between log_refund and the
   status flip. Two concurrent cancels both passed the status check, both logged
@@ -213,7 +213,7 @@
 
 ## Bug 16: Logout blacklist checks wrong JWT claim
 - **File/Line:** app/auth.py:97
-- **Difficulty:** Easy
+
 - **What was wrong:** `revoke_access_token` stored `payload["jti"]` in
   `_revoked_tokens`, but `get_token_payload` checked `payload.get("sub") in
   _revoked_tokens` — the user id, which was never added to the set.
@@ -225,7 +225,7 @@
 
 ## Bug 17: Refresh tokens are not single-use
 - **File/Line:** app/routers/auth.py:81-93
-- **Difficulty:** Medium
+
 - **What was wrong:** The `refresh` endpoint decoded the refresh token and
   issued new tokens but never invalidated the presented refresh token. The same
   refresh token could be reused indefinitely.
@@ -237,7 +237,7 @@
 
 ## Bug 18: Register returns existing user on duplicate username
 - **File/Line:** app/routers/auth.py:37-43
-- **Difficulty:** Easy
+
 - **What was wrong:** When a duplicate username was found, the register route
   returned the existing user's data with 200 instead of raising an error.
 - **Why it broke behavior:** Violated Rule 15 ("a duplicate username within the
@@ -248,7 +248,7 @@
 
 ## Bug 19: Bookings list — wrong sort, offset, and hardcoded limit
 - **File/Line:** app/routers/bookings.py:127-129
-- **Difficulty:** Medium
+
 - **What was wrong:** Three bugs: (1) `.desc()` instead of `.asc()` on
   `start_time`; (2) `page * limit` instead of `(page - 1) * limit` (page 1
   skipped the first `limit` items); (3) `.limit(10)` hardcoded instead of
@@ -263,7 +263,7 @@
 
 ## Bug 20: Export skips org check for room-specific export
 - **File/Line:** app/services/export.py:22-29
-- **Difficulty:** Medium
+
 - **What was wrong:** `fetch_bookings_raw` queried bookings by `room_id` only
   with no org filter. When `include_all=True` and a `room_id` was provided, an
   admin could export bookings from another org's room by guessing its ID.
@@ -275,7 +275,7 @@
 
 ## Bug 21: get_booking lets members read other members' bookings
 - **File/Line:** app/routers/bookings.py:152-153
-- **Difficulty:** Easy
+
 - **What was wrong:** `get_booking` filtered by org only, with no owner check
   for members. A member could read another member's booking in the same org.
 - **Why it broke behavior:** Violated Rule 10 ("members may read and cancel

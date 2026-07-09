@@ -82,14 +82,12 @@ Document each bug in `bug_report.md` (repo root) using this exact format:
 ```
 ## Bug N: [short name]
 - **File/Line:** app/path/to/file.py:LINE
-- **Difficulty:** Easy | Medium | Hard
 - **What was wrong:** [what the code did incorrectly]
 - **Why it broke behavior:** [which Rule/contract it violated + observed effect]
 - **Fix:** [what you changed]
 - **Verified by:** [initials], via [manual curl / pytest / concurrency script]
 ```
 
-- Difficulty: Easy = 3 pts, Medium = 5 pts, Hard = 10 pts.
 - Keep entries ordered by bug number. One section per bug.
 - Only include bugs you actually fixed; don't list unfixed issues.
 
