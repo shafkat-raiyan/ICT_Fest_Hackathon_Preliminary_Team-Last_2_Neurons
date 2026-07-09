@@ -13,7 +13,7 @@ from ..models import Booking, Room, User
 from ..schemas import BookingCreateRequest
 from ..serializers import serialize_booking
 from ..services import notifications, ratelimit, reference, stats
-from ..services.refunds import compute_refund_amount_cents, log_refund
+from ..services.refunds import log_refund
 from ..timeutils import iso_utc, parse_input_datetime
 
 router = APIRouter(tags=["bookings"])
@@ -206,9 +206,8 @@ def cancel_booking(
     else:
         refund_percent = 0
 
-    refund_amount_cents = compute_refund_amount_cents(booking.price_cents, refund_percent)
-
-    log_refund(db, booking, refund_percent)
+    refund_entry = log_refund(db, booking, refund_percent)
+    refund_amount_cents = refund_entry.amount_cents
 
     _settlement_pause()
     booking.status = "cancelled"

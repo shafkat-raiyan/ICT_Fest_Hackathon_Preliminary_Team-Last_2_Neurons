@@ -79,7 +79,7 @@
 - **Verified by:** SR, via pytest (72h→100%, 36h→50%, 10h→0%).
 
 ## Bug 7: Refund rounding uses banker's rounding + amount recomputed separately in RefundLog
-- **File/Line:** app/routers/bookings.py:211, app/services/refunds.py:14-17
+- **File/Line:** app/routers/bookings.py:209, app/services/refunds.py:14-17
 - **Difficulty:** Hard
 - **What was wrong:** (1) `round()` in Python uses banker's rounding
   (round-half-to-even), but Rule 6 requires half-cents rounding up. (2) The
@@ -89,9 +89,9 @@
 - **Why it broke behavior:** Violated Rule 6 ("half-cents rounding up" and "the
   amount returned by the cancel response must equal the amount stored in the
   RefundLog"). E.g. 50% of 1001 = 500.5 → `round()` gave 500, `int()` gave 500.
-- **Fix:** Added shared `compute_refund_amount_cents()` using
-  `Decimal.quantize(ROUND_HALF_UP)`; both cancel response and `log_refund` now
-  call it so they always match.
+- **Fix:** Fixed `log_refund`'s calculation to use `Decimal.quantize`
+  (`ROUND_HALF_UP`); changed the cancel route to use the `log_refund` return
+  value's `amount_cents` so response and RefundLog always match.
 - **Verified by:** SR, via pytest (50% of 1001 → 501; 50% of 1003 → 502;
   RefundLog amount == cancel response amount).
 
