@@ -13,7 +13,7 @@ from ..models import Booking, Room, User
 from ..schemas import BookingCreateRequest
 from ..serializers import serialize_booking
 from ..services import notifications, ratelimit, reference, stats
-from ..services.refunds import log_refund
+from ..services.refunds import compute_refund_amount_cents, log_refund
 from ..timeutils import iso_utc, parse_input_datetime
 
 router = APIRouter(tags=["bookings"])
@@ -166,7 +166,6 @@ def get_booking(
         raise AppError(404, "BOOKING_NOT_FOUND", "Booking not found")
 
     response = serialize_booking(booking)
-    response["start_time"] = iso_utc(booking.created_at)
     response["refunds"] = [
         {
             "amount_cents": r.amount_cents,
@@ -200,15 +199,14 @@ def cancel_booking(
 
     now = datetime.utcnow()
     notice = booking.start_time - now
-    notice_hours = int(notice.total_seconds() // 3600)
-    if notice_hours > 48:
+    if notice >= timedelta(hours=48):
         refund_percent = 100
     elif notice >= timedelta(hours=24):
         refund_percent = 50
     else:
-        refund_percent = 50
+        refund_percent = 0
 
-    refund_amount_cents = round(booking.price_cents * (refund_percent / 100.0))
+    refund_amount_cents = compute_refund_amount_cents(booking.price_cents, refund_percent)
 
     log_refund(db, booking, refund_percent)
 

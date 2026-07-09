@@ -54,4 +54,46 @@
 - **Verified by:** SR, via pytest script (past start, end==start, end<start,
   9-hour all return 400; valid 1h and 8h return 201).
 
+## Bug 5: get_booking overwrites start_time with created_at
+- **File/Line:** app/routers/bookings.py:169
+- **Difficulty:** Easy
+- **What was wrong:** `response["start_time"] = iso_utc(booking.created_at)`
+  overwrote the booking's `start_time` with its `created_at` timestamp.
+- **Why it broke behavior:** `GET /bookings/{id}` returned the wrong
+  `start_time` value, diverging from the create response and Rule 2/contract.
+- **Fix:** Removed the line so `serialize_booking`'s `start_time` is preserved.
+- **Verified by:** SR, via pytest (detail `start_time` matches create
+  `start_time`).
+
+## Bug 6: Refund tier logic — 0% case returns 50%, and 48h boundary wrong
+- **File/Line:** app/routers/bookings.py:200-209
+- **Difficulty:** Medium
+- **What was wrong:** (1) Used `notice_hours > 48` (int-truncated) instead of
+  `≥ 48h`, so exactly 48h notice gave 50% instead of 100%. (2) The `else`
+  branch (notice < 24h) returned `50` instead of `0`.
+- **Why it broke behavior:** Violated Rule 6 refund tiers. Cancellations with
+  <24h notice got 50% refund instead of 0%; exactly-48h notice got 50% instead
+  of 100%.
+- **Fix:** Replaced int-truncated `notice_hours` with direct `timedelta`
+  comparisons: `notice >= 48h → 100`, `≥ 24h → 50`, `else → 0`.
+- **Verified by:** SR, via pytest (72h→100%, 36h→50%, 10h→0%).
+
+## Bug 7: Refund rounding uses banker's rounding + amount recomputed separately in RefundLog
+- **File/Line:** app/routers/bookings.py:211, app/services/refunds.py:14-17
+- **Difficulty:** Hard
+- **What was wrong:** (1) `round()` in Python uses banker's rounding
+  (round-half-to-even), but Rule 6 requires half-cents rounding up. (2) The
+  cancel response computed `refund_amount_cents` via `round()` while
+  `log_refund` recomputed it independently via float division + `int()`
+  truncation — the two could diverge.
+- **Why it broke behavior:** Violated Rule 6 ("half-cents rounding up" and "the
+  amount returned by the cancel response must equal the amount stored in the
+  RefundLog"). E.g. 50% of 1001 = 500.5 → `round()` gave 500, `int()` gave 500.
+- **Fix:** Added shared `compute_refund_amount_cents()` using
+  `Decimal.quantize(ROUND_HALF_UP)`; both cancel response and `log_refund` now
+  call it so they always match.
+- **Verified by:** SR, via pytest (50% of 1001 → 501; 50% of 1003 → 502;
+  RefundLog amount == cancel response amount).
+
+
 
