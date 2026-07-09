@@ -39,3 +39,19 @@
 - **Verified by:** SR, via pytest script (back-to-back booking now succeeds,
   true overlap still returns 409 ROOM_CONFLICT).
 
+## Bug 4: Booking window validation — grace window, missing min duration, missing end≤start guard
+- **File/Line:** app/routers/bookings.py:86-94
+- **Difficulty:** Medium
+- **What was wrong:** Three issues: (1) `start <= now - timedelta(seconds=300)`
+  gave a 5-minute past grace window; (2) no `end <= start` guard, so negative
+  durations slipped through (`int(-1.0) == -1.0` passes whole-hours check, `-1 >
+  8` is False); (3) `MIN_DURATION_HOURS` (1) was defined but never checked, so
+  0-hour bookings passed.
+- **Why it broke behavior:** Violated Rule 2 (start strictly future — no grace;
+  end strictly after start; duration whole hours, min 1, max 8).
+- **Fix:** Changed past check to `start <= now`; added `end <= start` guard;
+  added `duration_hours < MIN_DURATION_HOURS` to the range check.
+- **Verified by:** SR, via pytest script (past start, end==start, end<start,
+  9-hour all return 400; valid 1h and 8h return 201).
+
+
