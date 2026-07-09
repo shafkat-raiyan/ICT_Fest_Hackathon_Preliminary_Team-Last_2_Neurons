@@ -181,6 +181,9 @@ def cancel_booking(
     if user.role != "admin" and booking.user_id != user.id:
         raise AppError(404, "BOOKING_NOT_FOUND", "Booking not found")
 
+    if booking.status == "cancelled":
+        raise AppError(409, "ALREADY_CANCELLED", "Booking already cancelled")
+
     now = datetime.utcnow()
     notice = booking.start_time - now
     if notice >= timedelta(hours=48):
@@ -191,15 +194,7 @@ def cancel_booking(
         refund_percent = 0
 
     with _cancel_lock:
-        db.expire_all()
-        booking = (
-            db.query(Booking)
-            .join(Room, Booking.room_id == Room.id)
-            .filter(Booking.id == booking_id, Room.org_id == user.org_id)
-            .first()
-        )
-        if booking is None:
-            raise AppError(404, "BOOKING_NOT_FOUND", "Booking not found")
+        db.refresh(booking)
         if booking.status == "cancelled":
             raise AppError(409, "ALREADY_CANCELLED", "Booking already cancelled")
 
