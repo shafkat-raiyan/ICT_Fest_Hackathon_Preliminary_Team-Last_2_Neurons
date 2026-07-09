@@ -165,6 +165,53 @@
   one at a time (email, then audit for create; audit, then email for cancel).
 - **Verified by:** SR, via code inspection (lock ordering no longer inverted).
 
+## Bug 13: Conflict check TOCTOU race under concurrent booking creation
+- **File/Line:** app/routers/bookings.py:48, 85-102
+- **Difficulty:** Hard
+- **What was wrong:** `_has_conflict` had a `_pricing_warmup()` sleep (0.12s)
+  between fetching existing bookings and the conflict decision, and the conflict
+  check + booking commit were separate non-atomic operations. Two concurrent
+  requests for the same slot both passed the conflict check before either
+  committed.
+- **Why it broke behavior:** Violated Rule 3 ("must hold under concurrent
+  requests"). Two overlapping bookings could be created for the same room/time.
+- **Fix:** Removed the `_pricing_warmup` sleep; wrapped the conflict check →
+  quota check → booking commit block in `_create_lock` so the check-then-act is
+  atomic.
+- **Verified by:** SR, via concurrency script (2 concurrent same-slot bookings
+  → exactly 1 created, 1 ROOM_CONFLICT).
+
+## Bug 14: Quota check TOCTOU race under concurrent booking creation
+- **File/Line:** app/routers/bookings.py:68, 88
+- **Difficulty:** Hard
+- **What was wrong:** `_check_quota` had a `_quota_audit()` sleep (0.1s) between
+  counting confirmed bookings and raising the error, and the quota check + new
+  booking commit were separate non-atomic operations. Concurrent requests all
+  saw count < 3 before any committed.
+- **Why it broke behavior:** Violated Rule 4 ("must hold under concurrent
+  requests"). A member could exceed 3 confirmed bookings in the 24h window.
+- **Fix:** Removed the `_quota_audit` sleep; the quota check is now inside
+  `_create_lock` (same lock as Bug 13) so check-and-create is atomic.
+- **Verified by:** SR, via concurrency script (4 concurrent bookings, quota=3
+  → exactly 3 created, 1 QUOTA_EXCEEDED).
+
+## Bug 15: Concurrent cancel creates duplicate RefundLogs
+- **File/Line:** app/routers/bookings.py:37-39, 195-214
+- **Difficulty:** Hard
+- **What was wrong:** The cancel route checked `booking.status == "cancelled"`,
+  then had a `_settlement_pause()` sleep (0.12s) between log_refund and the
+  status flip. Two concurrent cancels both passed the status check, both logged
+  refunds, and both flipped the status.
+- **Why it broke behavior:** Violated Rule 6 ("a cancelled booking has exactly
+  one RefundLog entry... must hold under concurrent cancel requests for the same
+  booking").
+- **Fix:** Removed the `_settlement_pause` sleep; wrapped the status check →
+  log_refund → status flip block in `_cancel_lock` with `db.expire_all()` before
+  re-querying so the status check reads committed data.
+- **Verified by:** SR, via concurrency script (2 concurrent cancels → exactly
+  1 cancelled, 1 ALREADY_CANCELLED, 1 RefundLog entry).
+
+
 
 
 
