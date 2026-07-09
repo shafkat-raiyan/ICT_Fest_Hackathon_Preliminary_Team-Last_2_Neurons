@@ -123,6 +123,36 @@
 - **Verified by:** SR, via concurrency script (40 concurrent requests →
   exactly 20 ok, 20 limited).
 
+## Bug 10: Stats service is not atomic under concurrency
+- **File/Line:** app/services/stats.py:15-26
+- **Difficulty:** Hard
+- **What was wrong:** `record_create` and `record_cancel` both used a
+  read-sleep-write pattern (`current = _stats.get(...)`; `sleep(0.1)`;
+  `_stats[room_id] = {...}`). Concurrent calls lost updates because they read
+  the same pre-update state during the sleep.
+- **Why it broke behavior:** Violated Rule 14 ("always equals the values
+  derivable from the bookings themselves, including after bursts of concurrent
+  activity"). Counts/revenue drifted below the true booking totals.
+- **Fix:** Wrapped the read-modify-write block in a `threading.Lock`; removed
+  the `sleep`. `get()` also acquires the lock for a consistent read.
+- **Verified by:** SR, via concurrency script (500 concurrent creates → count
+  exactly 500; 500 concurrent cancels → count exactly 0).
+
+## Bug 11: Cancel does not invalidate availability cache
+- **File/Line:** app/routers/bookings.py:218
+- **Difficulty:** Medium
+- **What was wrong:** The cancel route invalidated the report cache
+  (`cache.invalidate_report`) but not the availability cache. After a cancel,
+  `GET /rooms/{id}/availability` returned a stale busy interval.
+- **Why it broke behavior:** Violated Rule 13 ("availability... reflects the
+  current state immediately"). A cancelled booking still appeared as a busy
+  interval until the cache expired or was otherwise evicted.
+- **Fix:** Added `cache.invalidate_availability(booking.room_id,
+  booking.start_time.date().isoformat())` to the cancel route.
+- **Verified by:** SR, via pytest (availability shows 1 busy before cancel, 0
+  after cancel).
+
+
 
 
 
