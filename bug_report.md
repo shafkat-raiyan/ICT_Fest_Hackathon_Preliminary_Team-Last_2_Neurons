@@ -152,6 +152,20 @@
 - **Verified by:** SR, via pytest (availability shows 1 busy before cancel, 0
   after cancel).
 
+## Bug 12: Notifications deadlock under concurrent create+cancel
+- **File/Line:** app/services/notifications.py:24-35
+- **Difficulty:** Hard
+- **What was wrong:** `notify_created` acquired `_email_lock` then `_audit_lock`
+  (nested), while `notify_cancelled` acquired `_audit_lock` then `_email_lock`
+  (nested) — a classic lock-ordering inversion.
+- **Why it broke behavior:** Violated Rule 16 ("no combination of concurrent
+  valid requests may hang the service"). A concurrent booking create + cancel
+  could deadlock forever.
+- **Fix:** Un-nested the locks in both functions so they acquire and release
+  one at a time (email, then audit for create; audit, then email for cancel).
+- **Verified by:** SR, via code inspection (lock ordering no longer inverted).
+
+
 
 
 
